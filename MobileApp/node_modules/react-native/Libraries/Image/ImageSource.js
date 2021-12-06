@@ -4,16 +4,18 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
- * @flow
+ * @flow strict
  * @format
  */
+
 'use strict';
 
-// This is to sync with ImageSourcePropTypes.js.
-// We explicitly don't want this to be strict so that we can pass in objects
-// that might have more keys. This also has to be inexact to support taking
-// instances of classes like FBIcon.
-// https://fburl.com/8lynhvtw
+/**
+ * Keep this in sync with `DeprecatedImageSourcePropType.js`.
+ *
+ * This type is intentinoally inexact in order to permit call sites that supply
+ * extra properties.
+ */
 export type ImageURISource = $ReadOnly<{
   /**
    * `uri` is a string representing the resource identifier for the image, which
@@ -39,7 +41,7 @@ export type ImageURISource = $ReadOnly<{
    * `headers` is an object representing the HTTP headers to send along with the
    * request for a remote image.
    */
-  headers?: ?Object,
+  headers?: ?{[string]: string},
 
   /**
    * `body` is the HTTP body to send with the request. This must be a valid
@@ -82,9 +84,11 @@ export type ImageURISource = $ReadOnly<{
    * unspecified, meaning that one image pixel equates to one display point / DIP.
    */
   scale?: ?number,
+
+  ...
 }>;
 
-// We have to export any because of an issue in Flow with objects that come from Relay:
-// https://fburl.com/8ljo5tmr
-// https://fb.facebook.com/groups/flow/permalink/1824103160971624/
-export type ImageSource = ImageURISource | number | Array<ImageURISource>;
+export type ImageSource =
+  | number
+  | ImageURISource
+  | $ReadOnlyArray<ImageURISource>;

@@ -1,9 +1,10 @@
-/**
+/*
  * Copyright (c) Facebook, Inc. and its affiliates.
  *
- * <p>This source code is licensed under the MIT license found in the LICENSE file in the root
- * directory of this source tree.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 package com.facebook.react.devsupport;
 
 import static org.mockito.Mockito.*;
@@ -39,7 +40,7 @@ public class JSDebuggerWebSocketClientTest {
   }
 
   @Test
-  public void test_loadApplicationScript_ShouldSendCorrectMessage() throws Exception {
+  public void test_loadBundle_ShouldSendCorrectMessage() throws Exception {
     final JSDebuggerWebSocketClient.JSDebuggerCallback cb =
         PowerMockito.mock(JSDebuggerWebSocketClient.JSDebuggerCallback.class);
 
@@ -48,7 +49,7 @@ public class JSDebuggerWebSocketClientTest {
     injectedObjects.put("key1", "value1");
     injectedObjects.put("key2", "value2");
 
-    client.loadApplicationScript("http://localhost:8080/index.js", injectedObjects, cb);
+    client.loadBundle("http://localhost:8080/index.js", injectedObjects, cb);
     PowerMockito.verifyPrivate(client)
         .invoke(
             "sendMessage",
@@ -75,7 +76,7 @@ public class JSDebuggerWebSocketClientTest {
 
     client.onMessage(null, ByteString.encodeUtf8("{\"replyID\":0, \"result\":\"OK\"}"));
     PowerMockito.verifyPrivate(client, never())
-        .invoke("triggerRequestSuccess", anyInt(), anyString());
+        .invoke("triggerRequestSuccess", anyInt(), nullable(String.class));
     PowerMockito.verifyPrivate(client, never()).invoke("triggerRequestFailure", anyInt(), any());
   }
 
@@ -85,7 +86,7 @@ public class JSDebuggerWebSocketClientTest {
 
     client.onMessage(null, "{\"result\":\"OK\"}");
     PowerMockito.verifyPrivate(client, never())
-        .invoke("triggerRequestSuccess", anyInt(), anyString());
+        .invoke("triggerRequestSuccess", anyInt(), nullable(String.class));
     PowerMockito.verifyPrivate(client, never()).invoke("triggerRequestFailure", anyInt(), any());
   }
 
@@ -95,7 +96,7 @@ public class JSDebuggerWebSocketClientTest {
 
     client.onMessage(null, "{\"replyID\":null, \"result\":\"OK\"}");
     PowerMockito.verifyPrivate(client, never())
-        .invoke("triggerRequestSuccess", anyInt(), anyString());
+        .invoke("triggerRequestSuccess", anyInt(), nullable(String.class));
     PowerMockito.verifyPrivate(client, never()).invoke("triggerRequestFailure", anyInt(), any());
   }
 
@@ -130,6 +131,7 @@ public class JSDebuggerWebSocketClientTest {
     JSDebuggerWebSocketClient client = PowerMockito.spy(new JSDebuggerWebSocketClient());
 
     client.onMessage(null, "{\"replyID\":0, \"error\":null}");
-    PowerMockito.verifyPrivate(client).invoke("triggerRequestSuccess", anyInt(), anyString());
+    PowerMockito.verifyPrivate(client)
+        .invoke("triggerRequestSuccess", anyInt(), nullable(String.class));
   }
 }

@@ -1,9 +1,10 @@
 /*
  * Copyright (c) Facebook, Inc. and its affiliates.
  *
- * This source code is licensed under the MIT license found in the LICENSE
- * file in the root directory of this source tree.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #pragma once
 #include <algorithm>
 #include <array>
@@ -53,10 +54,10 @@ struct YGCachedMeasurement {
   float computedHeight;
 
   YGCachedMeasurement()
-      : availableWidth(0),
-        availableHeight(0),
-        widthMeasureMode((YGMeasureMode) -1),
-        heightMeasureMode((YGMeasureMode) -1),
+      : availableWidth(-1),
+        availableHeight(-1),
+        widthMeasureMode(YGMeasureModeUndefined),
+        heightMeasureMode(YGMeasureModeUndefined),
         computedWidth(-1),
         computedHeight(-1) {}
 

@@ -1,7 +1,9 @@
-// Copyright (c) Facebook, Inc. and its affiliates.
-
-// This source code is licensed under the MIT license found in the
-// LICENSE file in the root directory of this source tree.
+/*
+ * Copyright (c) Facebook, Inc. and its affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
 
 package com.facebook.react.bridge;
 
@@ -106,5 +108,8 @@ public enum ReactMarkerConstants {
   FABRIC_BATCH_EXECUTION_START,
   FABRIC_BATCH_EXECUTION_END,
   FABRIC_UPDATE_UI_MAIN_THREAD_START,
-  FABRIC_UPDATE_UI_MAIN_THREAD_END
+  FABRIC_UPDATE_UI_MAIN_THREAD_END,
+  // New markers used by bridgeless RN below this line
+  REACT_INSTANCE_INIT_START,
+  REACT_INSTANCE_INIT_END
 }

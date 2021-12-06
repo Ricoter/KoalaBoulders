@@ -1,17 +1,19 @@
-/**
+/*
  * Copyright (c) Facebook, Inc. and its affiliates.
  *
- * <p>This source code is licensed under the MIT license found in the LICENSE file in the root
- * directory of this source tree.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 package com.facebook.react.views.picker;
 
 import android.widget.Spinner;
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import com.facebook.react.bridge.ReadableArray;
 import com.facebook.react.uimanager.SimpleViewManager;
 import com.facebook.react.uimanager.ThemedReactContext;
-import com.facebook.react.uimanager.UIManagerModule;
+import com.facebook.react.uimanager.UIManagerHelper;
 import com.facebook.react.uimanager.ViewProps;
 import com.facebook.react.uimanager.annotations.ReactProp;
 import com.facebook.react.uimanager.events.EventDispatcher;
@@ -62,7 +64,19 @@ public abstract class ReactPickerManager extends SimpleViewManager<ReactPicker> 
   protected void addEventEmitters(final ThemedReactContext reactContext, final ReactPicker picker) {
     picker.setOnSelectListener(
         new PickerEventEmitter(
-            picker, reactContext.getNativeModule(UIManagerModule.class).getEventDispatcher()));
+            picker, UIManagerHelper.getEventDispatcherForReactTag(reactContext, picker.getId())));
+  }
+
+  @Override
+  public void receiveCommand(
+      @NonNull ReactPicker view, String commandId, @Nullable ReadableArray args) {
+    switch (commandId) {
+      case "setNativeSelectedPosition":
+        if (args != null) {
+          view.setImmediateSelection(args.getInt(0));
+          break;
+        }
+    }
   }
 
   private static class PickerEventEmitter implements ReactPicker.OnSelectListener {

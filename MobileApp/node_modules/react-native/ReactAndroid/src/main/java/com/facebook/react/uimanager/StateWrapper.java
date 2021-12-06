@@ -1,9 +1,10 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- * <p>This source code is licensed under the MIT license found in the LICENSE file in the root
- * directory of this source tree.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 package com.facebook.react.uimanager;
 
 import com.facebook.react.bridge.ReadableNativeMap;
@@ -20,6 +21,9 @@ public interface StateWrapper {
    */
   ReadableNativeMap getState();
 
-  /** Pass a map of values back to the C++ layer. */
-  void updateState(WritableMap map);
+  /**
+   * Pass a map of values back to the C++ layer. /Last/ runnable passed into updateState is called
+   * if an updateState call fails.
+   */
+  void updateState(WritableMap map, Runnable failureCallback);
 }

@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
@@ -20,9 +20,11 @@
 
 #import "RCTSurfacePresenter.h"
 
+using namespace facebook::react;
+
 @implementation RCTFabricSurface {
   // Immutable
-  RCTSurfacePresenter *_surfacePresenter;
+  __weak RCTSurfacePresenter *_surfacePresenter;
   NSString *_moduleName;
 
   // Protected by the `_mutex`
@@ -31,12 +33,16 @@
   NSDictionary *_properties;
   CGSize _minimumSize;
   CGSize _maximumSize;
+  CGPoint _viewportOffset;
   CGSize _intrinsicSize;
 
   // The Main thread only
   RCTSurfaceView *_Nullable _view;
   RCTSurfaceTouchHandler *_Nullable _touchHandler;
 }
+
+@synthesize delegate = _delegate;
+@synthesize rootTag = _rootTag;
 
 - (instancetype)initWithSurfacePresenter:(RCTSurfacePresenter *)surfacePresenter
                               moduleName:(NSString *)moduleName
@@ -49,14 +55,10 @@
     _rootTag = [RCTAllocateRootViewTag() integerValue];
 
     _minimumSize = CGSizeZero;
-    // FIXME: Replace with `_maximumSize = CGSizeMake(CGFLOAT_MAX, CGFLOAT_MAX);`.
-    _maximumSize = RCTScreenSize();
 
-    _touchHandler = [RCTSurfaceTouchHandler new];
+    _maximumSize = CGSizeMake(CGFLOAT_MAX, CGFLOAT_MAX);
 
     _stage = RCTSurfaceStageSurfaceDidInitialize;
-
-    [_surfacePresenter registerSurface:self];
   }
 
   return self;
@@ -67,8 +69,7 @@
   if (![self _setStage:RCTSurfaceStageStarted]) {
     return NO;
   }
-
-  [_surfacePresenter startSurface:self];
+  [_surfacePresenter registerSurface:self];
 
   return YES;
 }
@@ -103,6 +104,7 @@
 
   if (!_view) {
     _view = [[RCTSurfaceView alloc] initWithSurface:(RCTSurface *)self];
+    _touchHandler = [RCTSurfaceTouchHandler new];
     [_touchHandler attachToView:_view];
   }
 
@@ -198,22 +200,29 @@
 
 - (void)setSize:(CGSize)size
 {
-  [self setMinimumSize:size maximumSize:size];
+  [self setMinimumSize:size maximumSize:size viewportOffset:_viewportOffset];
 }
 
-- (void)setMinimumSize:(CGSize)minimumSize maximumSize:(CGSize)maximumSize
+- (void)setMinimumSize:(CGSize)minimumSize maximumSize:(CGSize)maximumSize viewportOffset:(CGPoint)viewportOffset
 {
   {
     std::lock_guard<std::mutex> lock(_mutex);
-    if (CGSizeEqualToSize(minimumSize, _minimumSize) && CGSizeEqualToSize(maximumSize, _maximumSize)) {
+    if (CGSizeEqualToSize(minimumSize, _minimumSize) && CGSizeEqualToSize(maximumSize, _maximumSize) &&
+        CGPointEqualToPoint(viewportOffset, _viewportOffset)) {
       return;
     }
 
     _maximumSize = maximumSize;
     _minimumSize = minimumSize;
+    _viewportOffset = viewportOffset;
   }
 
   [_surfacePresenter setMinimumSize:minimumSize maximumSize:maximumSize surface:self];
+}
+
+- (void)setMinimumSize:(CGSize)minimumSize maximumSize:(CGSize)maximumSize
+{
+  [self setMinimumSize:minimumSize maximumSize:maximumSize viewportOffset:_viewportOffset];
 }
 
 - (CGSize)minimumSize
@@ -226,6 +235,12 @@
 {
   std::lock_guard<std::mutex> lock(_mutex);
   return _maximumSize;
+}
+
+- (CGPoint)viewportOffset
+{
+  std::lock_guard<std::mutex> lock(_mutex);
+  return _viewportOffset;
 }
 
 #pragma mark - intrinsicSize
@@ -256,10 +271,9 @@
 
 #pragma mark - Synchronous Waiting
 
-- (BOOL)synchronouslyWaitForStage:(RCTSurfaceStage)stage timeout:(NSTimeInterval)timeout
+- (BOOL)synchronouslyWaitFor:(NSTimeInterval)timeout
 {
-  // TODO: Not supported yet.
-  return NO;
+  return [_surfacePresenter synchronouslyWaitSurface:self timeout:timeout];
 }
 
 #pragma mark - Deprecated

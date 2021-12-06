@@ -4,6 +4,7 @@ rn_android_library(
     name = "slider",
     srcs = glob(["*.java"]),
     is_androidx = True,
+    labels = ["supermodule:xplat/default/public.react_native.infra"],
     visibility = [
         "PUBLIC",
     ],
@@ -20,5 +21,6 @@ rn_android_library(
         react_native_target("java/com/facebook/react/common:common"),
         react_native_target("java/com/facebook/react/uimanager:uimanager"),
         react_native_target("java/com/facebook/react/uimanager/annotations:annotations"),
+        react_native_target("java/com/facebook/react/viewmanagers:viewmanagers"),
     ],
 )

@@ -1,4 +1,9 @@
-// Copyright 2004-present Facebook. All Rights Reserved.
+/*
+ * Copyright (c) Facebook, Inc. and its affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
 
 #include "AsyncHermesRuntime.h"
 #include "SyncConnection.h"
@@ -39,7 +44,8 @@ namespace {
 // the already-deallocated connection.
 class TestContext {
  public:
-  TestContext() : conn_(runtime_.runtime()) {}
+  TestContext(bool waitForDebugger = false, bool veryLazy = false)
+      : runtime_(veryLazy), conn_(runtime_.runtime(), waitForDebugger) {}
   ~TestContext() {
     runtime_.wait();
   }
@@ -80,6 +86,7 @@ NotificationType expectNotification(SyncConnection &conn) {
       note = NotificationType(folly::parseJson(str));
     } catch (const std::exception &e) {
       parseError = e.what();
+      parseError += " (json: " + str + ")";
     }
 
     EXPECT_EQ(parseError, "");
@@ -181,14 +188,15 @@ void expectCallFrames(
   }
 }
 
-// Helper to send a request wait for an empty response containing the req id.
-template <typename RequestType>
-void send(SyncConnection &conn, int id) {
+// Helper to send a request with no params and wait for a response (defaults
+// to empty) containing the req id.
+template <typename RequestType, typename ResponseType = m::OkResponse>
+ResponseType send(SyncConnection &conn, int id) {
   RequestType req;
   req.id = id;
   conn.send(req.toJson());
 
-  expectResponse<m::OkResponse>(conn, id);
+  return expectResponse<ResponseType>(conn, id);
 }
 
 void sendRuntimeEvalRequest(
@@ -221,8 +229,6 @@ m::runtime::ExecutionContextCreatedNotification expectExecutionContextCreated(
   EXPECT_EQ(note.context.id, 1);
   EXPECT_EQ(note.context.origin, "");
   EXPECT_EQ(note.context.name, "hermes");
-  EXPECT_EQ(note.context.isDefault, true);
-  EXPECT_EQ(note.context.isPageContext, true);
 
   return note;
 }
@@ -707,14 +713,152 @@ TEST(ConnectionTests, testSetBreakpoint) {
   expectNotification<m::debugger::ResumedNotification>(conn);
 }
 
-TEST(ConnectionTests, testSetLazyBreakpoint) {
+TEST(ConnectionTests, testSetBreakpointById) {
   TestContext context;
   AsyncHermesRuntime &asyncRuntime = context.runtime();
   SyncConnection &conn = context.conn();
   int msgId = 1;
 
-  facebook::hermes::HermesRuntime::DebugFlags flags{};
-  flags.lazy = true;
+  asyncRuntime.executeScriptAsync(R"(
+    debugger;      // line 1
+    Math.random(); //      2
+  )");
+
+  send<m::debugger::EnableRequest>(conn, ++msgId);
+  expectExecutionContextCreated(conn);
+  auto script = expectNotification<m::debugger::ScriptParsedNotification>(conn);
+
+  expectPaused(conn, "other", {{"global", 1, 1}});
+
+  m::debugger::SetBreakpointRequest req;
+  req.id = ++msgId;
+  req.location.scriptId = script.scriptId;
+  req.location.lineNumber = 2;
+
+  conn.send(req.toJson());
+  auto resp = expectResponse<m::debugger::SetBreakpointResponse>(conn, req.id);
+  EXPECT_EQ(resp.actualLocation.scriptId, script.scriptId);
+  EXPECT_EQ(resp.actualLocation.lineNumber, 2);
+  EXPECT_EQ(resp.actualLocation.columnNumber.value(), 4);
+
+  send<m::debugger::ResumeRequest>(conn, ++msgId);
+  expectNotification<m::debugger::ResumedNotification>(conn);
+
+  expectPaused(conn, "other", {{"global", 2, 1}});
+
+  send<m::debugger::ResumeRequest>(conn, ++msgId);
+  expectNotification<m::debugger::ResumedNotification>(conn);
+}
+
+TEST(ConnectionTests, testActivateBreakpoints) {
+  TestContext context;
+  AsyncHermesRuntime &asyncRuntime = context.runtime();
+  SyncConnection &conn = context.conn();
+  int msgId = 1;
+
+  asyncRuntime.executeScriptAsync(R"(
+    debugger;      // line 1
+    x=100          //      2
+    debugger;      //      3
+    x=101;         //      4
+  )");
+
+  send<m::debugger::EnableRequest>(conn, ++msgId);
+  expectExecutionContextCreated(conn);
+  auto script = expectNotification<m::debugger::ScriptParsedNotification>(conn);
+
+  expectPaused(conn, "other", {{"global", 1, 1}});
+
+  // Set breakpoint #1
+  m::debugger::SetBreakpointRequest req;
+  req.id = ++msgId;
+  req.location.scriptId = script.scriptId;
+  req.location.lineNumber = 2;
+  conn.send(req.toJson());
+  expectResponse<m::debugger::SetBreakpointResponse>(conn, req.id);
+
+  // Set breakpoint #2
+  req.id = ++msgId;
+  req.location.scriptId = script.scriptId;
+  req.location.lineNumber = 4;
+  conn.send(req.toJson());
+  expectResponse<m::debugger::SetBreakpointResponse>(conn, req.id);
+
+  // Disable breakpoints
+  m::debugger::SetBreakpointsActiveRequest activeReq;
+  activeReq.id = ++msgId;
+  activeReq.active = false;
+  conn.send(activeReq.toJson());
+  expectResponse<m::OkResponse>(conn, activeReq.id);
+
+  // Resume
+  send<m::debugger::ResumeRequest>(conn, ++msgId);
+  expectNotification<m::debugger::ResumedNotification>(conn);
+
+  // Expect first breakpoint to be skipped, now hitting line #3
+  expectPaused(conn, "other", {{"global", 3, 1}});
+
+  // Re-enable breakpoints
+  activeReq.id = ++msgId;
+  activeReq.active = true;
+  conn.send(activeReq.toJson());
+  expectResponse<m::OkResponse>(conn, activeReq.id);
+
+  // Resume and expect breakpoints to trigger again
+  send<m::debugger::ResumeRequest>(conn, ++msgId);
+  expectNotification<m::debugger::ResumedNotification>(conn);
+  expectPaused(conn, "other", {{"global", 4, 1}});
+
+  // Continue and exit
+  send<m::debugger::ResumeRequest>(conn, ++msgId);
+  expectNotification<m::debugger::ResumedNotification>(conn);
+}
+
+TEST(ConnectionTests, testSetBreakpointByIdWithColumnInIndenting) {
+  TestContext context;
+  AsyncHermesRuntime &asyncRuntime = context.runtime();
+  SyncConnection &conn = context.conn();
+  int msgId = 1;
+
+  asyncRuntime.executeScriptAsync(R"(
+    debugger;      // line 1
+    Math.random(); //      2
+  )");
+
+  send<m::debugger::EnableRequest>(conn, ++msgId);
+  expectExecutionContextCreated(conn);
+  auto script = expectNotification<m::debugger::ScriptParsedNotification>(conn);
+
+  expectPaused(conn, "other", {{"global", 1, 1}});
+
+  m::debugger::SetBreakpointRequest req;
+  req.id = ++msgId;
+  req.location.scriptId = script.scriptId;
+  req.location.lineNumber = 2;
+  // Specify a column location *before* rather than *on* the actual location
+  req.location.columnNumber = 0;
+
+  conn.send(req.toJson());
+  auto resp = expectResponse<m::debugger::SetBreakpointResponse>(conn, req.id);
+  EXPECT_EQ(resp.actualLocation.scriptId, script.scriptId);
+  EXPECT_EQ(resp.actualLocation.lineNumber, 2);
+  // Check that we resolved the column to the first available location
+  EXPECT_EQ(resp.actualLocation.columnNumber.value(), 4);
+
+  send<m::debugger::ResumeRequest>(conn, ++msgId);
+  expectNotification<m::debugger::ResumedNotification>(conn);
+
+  expectPaused(conn, "other", {{"global", 2, 1}});
+
+  send<m::debugger::ResumeRequest>(conn, ++msgId);
+  expectNotification<m::debugger::ResumedNotification>(conn);
+}
+
+TEST(ConnectionTests, testSetLazyBreakpoint) {
+  TestContext context;
+  AsyncHermesRuntime &asyncRuntime = context.runtime();
+  SyncConnection &conn = context.conn();
+  int msgId = 1;
 
   asyncRuntime.executeScriptAsync(
       R"(
@@ -732,8 +876,7 @@ TEST(ConnectionTests, testSetLazyBreakpoint) {
 
     foo();
   )",
-      "url",
-      flags);
+      "url");
 
   send<m::debugger::EnableRequest>(conn, msgId++);
   expectExecutionContextCreated(conn);
@@ -1127,6 +1270,38 @@ TEST(ConnectionTests, testRuntimeEvaluate) {
   asyncRuntime.stop();
 }
 
+TEST(ConnectionTests, testRuntimeEvaluateReturnByValue) {
+  TestContext context;
+  AsyncHermesRuntime &asyncRuntime = context.runtime();
+  SyncConnection &conn = context.conn();
+  int msgId = 1;
+
+  asyncRuntime.executeScriptAsync("while(!shouldStop());");
+
+  send<m::debugger::EnableRequest>(conn, msgId++);
+  expectExecutionContextCreated(conn);
+  expectNotification<m::debugger::ScriptParsedNotification>(conn);
+
+  // We expect this JSON object to be evaluated and return by value, so
+  // that JSON encoding the result will give the same string.
+  auto object = "{\"key\":[1,\"two\"]}";
+
+  m::runtime::EvaluateRequest req;
+  req.id = msgId;
+  req.expression = std::string("(") + object + ")";
+  req.returnByValue = true;
+  conn.send(req.toJson());
+
+  auto resp =
+      expectResponse<m::debugger::EvaluateOnCallFrameResponse>(conn, msgId);
+  EXPECT_EQ(resp.result.type, "object");
+  ASSERT_TRUE(resp.result.value.hasValue());
+  EXPECT_EQ(folly::toJson(resp.result.value.value()), object);
+
+  // [3] exit run loop
+  asyncRuntime.stop();
+}
+
 TEST(ConnectionTests, testEvalOnCallFrameException) {
   TestContext context;
   AsyncHermesRuntime &asyncRuntime = context.runtime();
@@ -1182,7 +1357,7 @@ TEST(ConnectionTests, testEvalOnCallFrameException) {
        // TODO: unsure why these frames are here, but they're in hdb tests
        // too. Ask Hermes about if they really should be there.
        FrameInfo("eval", 0, 0).setLineNumberMax(19),
-       FrameInfo("(native)", 0, 0),
+       FrameInfo("callme", 12, 2),
        FrameInfo("global", 0, 0).setLineNumberMax(19)});
   expectEvalResponse(conn, msgId + 2, 5);
   msgId += 3;
@@ -1291,7 +1466,8 @@ TEST(ConnectionTests, testGetProperties) {
       conn,
       msgId++,
       scopeObjId,
-      {{"num", PropInfo("number").setValue(123)},
+      {{"this", PropInfo("undefined")},
+       {"num", PropInfo("number").setValue(123)},
        {"obj", PropInfo("object")},
        {"arr", PropInfo("object").setSubtype("array")},
        {"bar", PropInfo("function")}});
@@ -1372,7 +1548,9 @@ TEST(ConnectionTests, testGetPropertiesOnlyOwnProperties) {
       conn,
       msgId++,
       scopeObject.objectId.value(),
-      {{"obj", PropInfo("object")}, {"protoObject", PropInfo("object")}});
+      {{"this", PropInfo("undefined")},
+       {"obj", PropInfo("object")},
+       {"protoObject", PropInfo("object")}});
   EXPECT_EQ(scopeChildren.count("obj"), 1);
   std::string objId = scopeChildren.at("obj");
 
@@ -1624,6 +1802,17 @@ TEST(ConnectionTests, testSetPauseOnExceptionsUncaught) {
   EXPECT_EQ(asyncRuntime.getLastThrownExceptionMessage(), "Uncaught exception");
 }
 
+TEST(ConnectionTests, invalidPauseModeGivesError) {
+  TestContext context;
+  SyncConnection &conn = context.conn();
+
+  m::debugger::SetPauseOnExceptionsRequest req;
+  req.id = 1;
+  req.state = "badgers";
+  conn.send(req.toJson());
+  expectResponse<m::ErrorResponse>(conn, req.id);
+}
+
 TEST(ConnectionTests, testShouldPauseOnThrow) {
   TestContext context;
   AsyncHermesRuntime &asyncRuntime = context.runtime();
@@ -1718,14 +1907,14 @@ TEST(ConnectionTests, testScopeVariables) {
   EXPECT_EQ(scopeChain.size(), 2);
 
   // [2] inspect local scope
-  EXPECT_EQ(scopeChain.at(0).name, "Scope 0");
   EXPECT_EQ(scopeChain.at(0).type, "local");
   auto localScopeObject = scopeChain.at(0).object;
   auto localScopeObjectChildren = expectProps(
       conn,
       msgId++,
       localScopeObject.objectId.value(),
-      {{"localString", PropInfo("string").setValue("local-string")},
+      {{"this", PropInfo("undefined")},
+       {"localString", PropInfo("string").setValue("local-string")},
        {"localObject", PropInfo("object")}});
   auto localObjectId = localScopeObjectChildren.at("localObject");
   expectProps(
@@ -1741,7 +1930,6 @@ TEST(ConnectionTests, testScopeVariables) {
   // in our test code and we can't use expectProps() method here.
   // As a workaround we create a Map of properties and check that
   // those global properties that we have defined are in the map.
-  EXPECT_EQ(scopeChain.at(1).name, "Global Scope");
   EXPECT_EQ(scopeChain.at(1).type, "global");
   auto globalScopeObject = scopeChain.at(1).object;
   m::runtime::GetPropertiesRequest req;
@@ -2141,6 +2329,122 @@ function foo(){x=1}debugger;foo();
       {FrameInfo("foo", 1, 2).setColumnNumber(16), FrameInfo("global", 1, 1)});
 
   // Resume execution
+  send<m::debugger::ResumeRequest>(conn, msgId++);
+  expectNotification<m::debugger::ResumedNotification>(conn);
+}
+
+TEST(ConnectionTests, canBreakOnScriptsWithSourceMap) {
+  TestContext context;
+  AsyncHermesRuntime &asyncRuntime = context.runtime();
+  SyncConnection &conn = context.conn();
+  int msgId = 1;
+
+  send<m::debugger::EnableRequest>(conn, msgId++);
+  expectExecutionContextCreated(conn);
+
+  m::debugger::SetInstrumentationBreakpointRequest req;
+  req.id = msgId++;
+  req.instrumentation = "beforeScriptWithSourceMapExecution";
+
+  conn.send(req.toJson());
+  auto bpId = expectResponse<m::debugger::SetInstrumentationBreakpointResponse>(
+                  conn, req.id)
+                  .breakpointId;
+
+  asyncRuntime.executeScriptAsync(R"(
+      storeValue(42); debugger;
+      //# sourceURL=http://example.com/source.js
+      //# sourceMappingURL=http://example.com/source.map
+    )");
+  expectNotification<m::debugger::ScriptParsedNotification>(conn);
+
+  // We should get a pause before the first statement
+  auto note = expectNotification<m::debugger::PausedNotification>(conn);
+  ASSERT_FALSE(asyncRuntime.hasStoredValue());
+  EXPECT_EQ(note.reason, "other");
+  ASSERT_TRUE(note.hitBreakpoints.hasValue());
+  ASSERT_EQ(note.hitBreakpoints->size(), 1);
+  EXPECT_EQ(note.hitBreakpoints->at(0), bpId);
+
+  // Continue and verify that the JS code has now executed
+  send<m::debugger::ResumeRequest>(conn, msgId++);
+  expectNotification<m::debugger::ResumedNotification>(conn);
+  expectNotification<m::debugger::PausedNotification>(conn);
+  EXPECT_EQ(asyncRuntime.awaitStoredValue().asNumber(), 42);
+
+  // Resume and exit
+  send<m::debugger::ResumeRequest>(conn, msgId++);
+  expectNotification<m::debugger::ResumedNotification>(conn);
+}
+
+TEST(ConnectionTests, wontStopOnFilesWithoutSourceMaps) {
+  TestContext context;
+  AsyncHermesRuntime &asyncRuntime = context.runtime();
+  SyncConnection &conn = context.conn();
+  int msgId = 1;
+
+  send<m::debugger::EnableRequest>(conn, msgId++);
+  expectExecutionContextCreated(conn);
+
+  m::debugger::SetInstrumentationBreakpointRequest req;
+  req.id = msgId++;
+  req.instrumentation = "beforeScriptWithSourceMapExecution";
+
+  conn.send(req.toJson());
+  expectResponse<m::debugger::SetInstrumentationBreakpointResponse>(
+      conn, req.id);
+
+  // This script has no source map, so it should not trigger a break
+  asyncRuntime.executeScriptAsync(R"(
+      storeValue(42); debugger;
+      //# sourceURL=http://example.com/source.js
+    )");
+  expectNotification<m::debugger::ScriptParsedNotification>(conn);
+
+  // Continue and verify that the JS code has now executed without first
+  // pausing on the script load.
+  expectNotification<m::debugger::PausedNotification>(conn);
+  EXPECT_EQ(asyncRuntime.awaitStoredValue().asNumber(), 42);
+
+  // Resume and exit
+  send<m::debugger::ResumeRequest>(conn, msgId++);
+  expectNotification<m::debugger::ResumedNotification>(conn);
+}
+
+TEST(ConnectionTests, runIfWaitingForDebugger) {
+  TestContext context(true);
+  AsyncHermesRuntime &asyncRuntime = context.runtime();
+  SyncConnection &conn = context.conn();
+  int msgId = 0;
+
+  asyncRuntime.executeScriptAsync(R"(
+      storeValue(1); debugger;
+    )");
+
+  send<m::debugger::EnableRequest>(conn, ++msgId);
+  expectExecutionContextCreated(conn);
+  expectNotification<m::debugger::ScriptParsedNotification>(conn);
+  expectNotification<m::debugger::PausedNotification>(conn);
+
+  // We should now be paused on load. Verify that we didn't run code.
+  ASSERT_FALSE(asyncRuntime.hasStoredValue());
+
+  // RunIfWaitingForDebugger should cause us to resume
+  send<m::runtime::RunIfWaitingForDebuggerRequest>(conn, ++msgId);
+  expectNotification<m::debugger::ResumedNotification>(conn);
+
+  // We should immediately hit the 'debugger;' statement
+  expectNotification<m::debugger::PausedNotification>(conn);
+  EXPECT_EQ(1, asyncRuntime.awaitStoredValue().asNumber());
+
+  // RunIfWaitingForDebuggerResponse should be accepted but have no effect
+  send<m::runtime::RunIfWaitingForDebuggerRequest>(conn, ++msgId);
+
+  // Do a dummy call so we can expect something other than a ResumeRequest
+  sendRuntimeEvalRequest(conn, ++msgId, "true");
+  expectEvalResponse(conn, msgId, true);
+
+  // Finally explicitly continue and exit
   send<m::debugger::ResumeRequest>(conn, msgId++);
   expectNotification<m::debugger::ResumedNotification>(conn);
 }

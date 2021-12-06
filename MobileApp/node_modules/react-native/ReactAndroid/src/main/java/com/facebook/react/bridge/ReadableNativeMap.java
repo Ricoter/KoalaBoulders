@@ -1,9 +1,10 @@
-/**
+/*
  * Copyright (c) Facebook, Inc. and its affiliates.
  *
- * <p>This source code is licensed under the MIT license found in the LICENSE file in the root
- * directory of this source tree.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 package com.facebook.react.bridge;
 
 import androidx.annotation.NonNull;
@@ -119,7 +120,7 @@ public class ReadableNativeMap extends NativeMap implements ReadableMap {
     if (hasKey(name)) {
       return getLocalMap().get(name);
     }
-    throw new NoSuchKeyException(name);
+    return null;
   }
 
   private @Nullable <T> T getNullableValue(String name, Class<T> type) {

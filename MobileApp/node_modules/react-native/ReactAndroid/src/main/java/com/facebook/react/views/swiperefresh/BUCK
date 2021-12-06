@@ -4,6 +4,7 @@ rn_android_library(
     name = "swiperefresh",
     srcs = glob(["*.java"]),
     is_androidx = True,
+    labels = ["supermodule:xplat/default/public.react_native.infra"],
     provided_deps = [
         react_native_dep("third-party/android/androidx:annotation"),
         react_native_dep("third-party/android/androidx:core"),
@@ -22,5 +23,8 @@ rn_android_library(
         react_native_target("java/com/facebook/react/uimanager:uimanager"),
         react_native_target("java/com/facebook/react/uimanager/annotations:annotations"),
         react_native_target("java/com/facebook/react/views/scroll:scroll"),
+    ],
+    exported_deps = [
+        react_native_target("java/com/facebook/react/viewmanagers:viewmanagers"),
     ],
 )

@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "koalaboulders",
-    "slug": "snack-08044b00-c32b-42d9-a002-5307976deaf0",
+    "name": "MobileApp",
+    "slug": "MobileApp",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",

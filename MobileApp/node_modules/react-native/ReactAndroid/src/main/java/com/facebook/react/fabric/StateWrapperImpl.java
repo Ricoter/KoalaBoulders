@@ -1,16 +1,20 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- * <p>This source code is licensed under the MIT license found in the LICENSE file in the root
- * directory of this source tree.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 package com.facebook.react.fabric;
 
 import android.annotation.SuppressLint;
+import androidx.annotation.AnyThread;
+import androidx.annotation.NonNull;
 import com.facebook.jni.HybridData;
 import com.facebook.proguard.annotations.DoNotStrip;
 import com.facebook.react.bridge.NativeMap;
 import com.facebook.react.bridge.ReadableNativeMap;
+import com.facebook.react.bridge.UiThreadUtil;
 import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.uimanager.StateWrapper;
 
@@ -26,6 +30,9 @@ public class StateWrapperImpl implements StateWrapper {
 
   @DoNotStrip private final HybridData mHybridData;
 
+  private Runnable mFailureCallback = null;
+  private int mUpdateStateId = 0;
+
   private static native HybridData initHybrid();
 
   private StateWrapperImpl() {
@@ -35,10 +42,31 @@ public class StateWrapperImpl implements StateWrapper {
   @Override
   public native ReadableNativeMap getState();
 
-  public native void updateStateImpl(NativeMap map);
+  public native void updateStateImpl(@NonNull NativeMap map);
+
+  public native void updateStateWithFailureCallbackImpl(
+      @NonNull NativeMap map, Object self, int updateStateId);
 
   @Override
-  public void updateState(WritableMap map) {
-    updateStateImpl((NativeMap) map);
+  public void updateState(@NonNull WritableMap map, Runnable failureCallback) {
+    mUpdateStateId++;
+    mFailureCallback = failureCallback;
+    updateStateWithFailureCallbackImpl((NativeMap) map, this, mUpdateStateId);
+  }
+
+  @DoNotStrip
+  @AnyThread
+  public void updateStateFailed(int callbackRefId) {
+    // If the callback ref ID doesn't match the ID of the most-recent updateState call,
+    // then it's an outdated failure callback and we ignore it.
+    if (callbackRefId != mUpdateStateId) {
+      return;
+    }
+
+    final Runnable failureCallback = mFailureCallback;
+    mFailureCallback = null;
+    if (failureCallback != null) {
+      UiThreadUtil.runOnUiThread(failureCallback);
+    }
   }
 }
