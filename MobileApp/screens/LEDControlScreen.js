@@ -2,6 +2,12 @@ import React from 'react'
 import { View, Text, StyleSheet } from 'react-native'
 import { ColorPicker } from 'react-native-color-picker'
 
+
+const SendColor = (props) => {
+  
+}
+
+
 const Picker = () => (
   <ColorPicker
     onColorSelected={color => alert(`Color selected: ${color}`)}
@@ -11,10 +17,7 @@ const Picker = () => (
 
 const LEDControlScreen = () => {
   return (
-    <View>
-      <Text>Color Control</Text>
-      <Picker/>
-    </View>
+    <Picker/>
 
     // <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
     //   <Text>LED Control Screen</Text>
