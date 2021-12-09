@@ -10,7 +10,7 @@ const SendColor = (props) => {
 
 const Picker = () => (
   <ColorPicker
-    onColorSelected={color => alert(`Color selected: ${color}`)}
+    onColorSelected={color => SendColor(color)}
     style={styles.pickerContainer}
   />
 )

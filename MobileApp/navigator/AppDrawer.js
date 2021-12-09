@@ -13,7 +13,9 @@ import LEDControlScreen from '../screens/LEDControlScreen'
 import SettingScreen from '../screens/SettingsScreen'
 import TrainingScreen from '../screens/TrainingScreen'
 
+
 const Drawer = createDrawerNavigator();
+
 
 const screenOpt = {
   headerShown: false,
@@ -23,9 +25,7 @@ const screenOpt = {
 }
 
 
-
-function App() {
-  
+function App() {  
   return (
     <Drawer.Navigator initialRouteName="💡 Create boulder" screenOptions={screenOpt}>
       <Drawer.Screen name="🏠 Home" component={HomeScreen} />
@@ -39,10 +39,6 @@ function App() {
   );
 }
 
-// export default NewBoulderCard
-export default App;
-
-
 
 const styles = StyleSheet.create({
   container: {
@@ -52,3 +48,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'black',//'#ecf0f1',
   },
 });
+
+
+// export default NewBoulderCard
+export default App;

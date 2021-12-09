@@ -63,11 +63,11 @@ class CreateBoulderScreen extends Component {
           <View
             style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
             <Button
-              title={'random [' + this.state.nRandom + ']'}
+              title={'random (' + this.state.nRandom + ')'}
               onPress={() =>
                 this.setState({ squares: this.getRandom(this.state.nRandom) })
               }
-              color="#866906"
+              color="orange"
             />
             <Button
               title="🗑️"
