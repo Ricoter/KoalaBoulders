@@ -140,7 +140,7 @@ const styles = StyleSheet.create({
     paddingTop: 40,
     alignContent: 'center',
     height: '100%',
-    backgroundColor: '#222',
+    backgroundColor: '#252525',
   },
   textInputStyle: {
     padding: 10,
