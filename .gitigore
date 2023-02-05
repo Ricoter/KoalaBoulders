@@ -1,14 +1,14 @@
-node_modules/
-.expo/
-dist/
-npm-debug.*
-*.jks
-*.p8
-*.p12
-*.key
-*.mobileprovision
-*.orig.*
-web-build/
+MobileApp/node_modules/
+MobileApp/.expo/
+MobileApp/dist/
+MobileApp/npm-debug.*
+MobileApp/*.jks
+MobileApp/*.p8
+MobileApp/*.p12
+MobileApp/*.key
+MobileApp/*.mobileprovision
+MobileApp/*.orig.*
+MobileApp/web-build/
 
 # macOS
 .DS_Store
